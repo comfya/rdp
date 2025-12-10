@@ -39,13 +39,12 @@ jobs:
               Special = ([char[]](33..47) + [char[]](58..64) +
                          [char[]](91..96) + [char[]](123..126)) # Special characters
           }
-          # 禁用密码复杂性策略
-          secedit /export /cfg $env:TEMP\sec.cfg
-          ((Get-Content $env:TEMP\sec.cfg) -replace "PasswordComplexity = 1", "PasswordComplexity = 0") | Out-File $env:TEMP\sec.cfg
-          secedit /configure /db $env:TEMP\ntsec.db /cfg $env:TEMP\sec.cfg /areas SECURITYPOLICY
-          Remove-Item $env:TEMP\sec.cfg, $env:TEMP\ntsec.db -Force
-          # Make an easy PASS
-          $password = "comfya@Github0"
+          $rawPassword = @()
+          $rawPassword += $charSet.Upper | Get-Random -Count 4
+          $rawPassword += $charSet.Lower | Get-Random -Count 4
+          $rawPassword += $charSet.Number | Get-Random -Count 4
+          $rawPassword += $charSet.Special | Get-Random -Count 4
+          $password = -join ($rawPassword | Sort-Object { Get-Random })
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
