@@ -39,18 +39,34 @@ jobs:
               Special = ([char[]](33..47) + [char[]](58..64) +
                          [char[]](91..96) + [char[]](123..126)) # Special characters
           }
-          $rawPassword = @()
-          $rawPassword += $charSet.Upper | Get-Random -Count 4
-          $rawPassword += $charSet.Lower | Get-Random -Count 4
-          $rawPassword += $charSet.Number | Get-Random -Count 4
-          $rawPassword += $charSet.Special | Get-Random -Count 4
-          $password = -join ($rawPassword | Sort-Object { Get-Random })
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          # 禁用密码复杂性策略
+          secedit /export /cfg $env:TEMP\sec.cfg
+          ((Get-Content $env:TEMP\sec.cfg) -replace "PasswordComplexity = 1", "PasswordComplexity = 0") | Out-File $env:TEMP\sec.cfg
+          secedit /configure /db $env:TEMP\ntsec.db /cfg $env:TEMP\sec.cfg /areas SECURITYPOLICY
+          Remove-Item $env:TEMP\sec.cfg, $env:TEMP\ntsec.db -Force
+
+          # 允许密码为空的账户
+          secedit /export /cfg $env:TEMP\sec2.cfg
+          ((Get-Content $env:TEMP\sec2.cfg) -replace "LimitBlankPasswordUse = 1", "LimitBlankPasswordUse = 0") | Out-File $env:TEMP\sec2.cfg
+          secedit /configure /db $env:TEMP\ntsec2.db /cfg $env:TEMP\sec2.cfg /areas SECURITYPOLICY
+          Remove-Item $env:TEMP\sec2.cfg, $env:TEMP\ntsec2.db -Force
+
+          # 修改本地策略允许空密码远程登录
+          # 这个策略默认禁止空密码账户通过网络（如RDP）登录
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LimitBlankPasswordUse" -Value 0 -Type DWord -Force
+
+          # 创建空密码用户（$null或空字符串）
+          New-LocalUser -Name "RDP" -Password ([SecureString]::new()) -AccountNeverExpires
+          # 或使用：New-LocalUser -Name "RDP" -NoPassword -AccountNeverExpires
+          ## Make an easy PASS
+          #$password = "comfya@Github0"
+          #$securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
-          
-          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+
+          $password = ""
+          echo "RDP_CREDS=User: RDP | Password: $password[EMPTY]" >> $env:GITHUB_ENV
           
           if (-not (Get-LocalUser -Name "RDP")) {
               Write-Error "User creation failed"
